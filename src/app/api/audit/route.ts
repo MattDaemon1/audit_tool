@@ -23,8 +23,8 @@ export async function POST(req: NextRequest) {
 
         const results = await runHybridAudit(domain, auditMode)
 
-        return NextResponse.json({ 
-            success: true, 
+        return NextResponse.json({
+            success: true,
             ...results
         })
     } catch (error) {

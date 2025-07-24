@@ -85,12 +85,12 @@ export default function Home() {
     <main className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="text-center max-w-6xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Audit Express de site web</h1>
-        
+
         {!results ? (
           <div className="max-w-md mx-auto">
             <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md">
               <h2 className="text-xl font-semibold mb-4">Entrez le domaine à auditer</h2>
-              
+
               {/* Mode selection */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Mode d'audit</label>
@@ -105,7 +105,7 @@ export default function Home() {
                       className="mr-2"
                     />
                     <span className="text-sm">
-                      <strong>Rapide</strong> (~15s)<br/>
+                      <strong>Rapide</strong> (~15s)<br />
                       <span className="text-gray-600">Lighthouse + SEO de base</span>
                     </span>
                   </label>
@@ -119,7 +119,7 @@ export default function Home() {
                       className="mr-2"
                     />
                     <span className="text-sm">
-                      <strong>Complet</strong> (~45s)<br/>
+                      <strong>Complet</strong> (~45s)<br />
                       <span className="text-gray-600">+ Analyse avancée</span>
                     </span>
                   </label>
@@ -136,7 +136,7 @@ export default function Home() {
                   required
                 />
               </div>
-              
+
               {error && <p className="text-red-500 mb-4">{error}</p>}
               {loading && (
                 <p className="text-blue-500 mb-4">
@@ -144,7 +144,7 @@ export default function Home() {
                   {auditMode === 'fast' ? ' (~15s)' : ' (~45s)'}
                 </p>
               )}
-              
+
               <button
                 type="submit"
                 disabled={loading}
@@ -172,7 +172,7 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-              
+
               {/* Lighthouse Scores */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center">
@@ -260,7 +260,7 @@ export default function Home() {
                     </ul>
                   </div>
                 </div>
-                
+
                 {results.seoAdvanced.recommendations && results.seoAdvanced.recommendations.length > 0 && (
                   <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
                     <h4 className="font-semibold text-yellow-800 mb-2">Recommandations</h4>
