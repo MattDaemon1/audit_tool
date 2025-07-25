@@ -19,7 +19,39 @@ interface AuditResult {
     hasRobotsTxt: boolean
     hasSitemap: boolean
   }
+  security?: {
+    https: boolean
+    headers: {
+      contentSecurityPolicy: boolean
+      strictTransportSecurity: boolean
+      xFrameOptions: boolean
+      xContentTypeOptions: boolean
+      referrerPolicy: boolean
+      permissionsPolicy: boolean
+    }
+    headerScore: number
+  }
+  rgpd?: {
+    hasCookieBanner: boolean
+    hasPrivacyPolicy: boolean
+    hasTermsOfService: boolean
+    cookieConsentDetected: boolean
+  }
+  cookies?: {
+    total: number
+    thirdParty: number
+    hasSecureFlags: number
+    details: Array<{
+      name: string
+      domain: string
+      httpOnly: boolean
+      secure: boolean
+      sameSite: string | undefined
+      isThirdParty: boolean
+    }>
+  }
   seoAdvanced?: any
+  securityRecommendations?: string[]
   executionTime: number
   mode: AuditMode
 }
@@ -79,6 +111,46 @@ export default function Home() {
     setResults(null)
     setDomain('')
     setError('')
+  }
+
+  const downloadPdf = async () => {
+    if (!results || !domain) return;
+
+    try {
+      setLoading(true);
+      const response = await fetch('/api/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain,
+          mode: results.mode,
+          options: {
+            includeDetails: results.mode === 'complete',
+            includeRecommendations: true
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Erreur lors de la génération du PDF');
+      }
+
+      // Télécharger le fichier
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-${domain}-${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+    } catch (err: any) {
+      setError(`Erreur PDF: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -162,8 +234,21 @@ export default function Home() {
                 <h2 className="text-2xl font-bold">Résultats pour {domain}</h2>
                 <div className="flex gap-4 items-center">
                   <span className="text-sm text-gray-600">
-                    Mode {results.mode} • {results.executionTime}ms
+                    Mode {results.mode} • {Math.round(results.executionTime / 1000)}s
                   </span>
+                  <button
+                    onClick={downloadPdf}
+                    disabled={loading}
+                    className={`px-4 py-2 text-white rounded flex items-center gap-2 ${loading
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-green-600 hover:bg-green-700'
+                      }`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    {loading ? 'Génération...' : 'PDF'}
+                  </button>
                   <button
                     onClick={resetForm}
                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -226,6 +311,79 @@ export default function Home() {
                 </div>
               </div>
             </div>
+
+            {/* Security & RGPD Results */}
+            {results.security && (
+              <div className="bg-white p-6 rounded-lg shadow-md">
+                <h3 className="text-xl font-semibold mb-4">Sécurité & RGPD</h3>
+
+                {/* Security Headers */}
+                <div className="mb-4">
+                  <h4 className="font-semibold text-red-600 mb-2">Headers de Sécurité ({results.security.headerScore}%)</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                    <div>HTTPS: {results.security.https ? '✅' : '❌'}</div>
+                    <div>CSP: {results.security.headers.contentSecurityPolicy ? '✅' : '❌'}</div>
+                    <div>HSTS: {results.security.headers.strictTransportSecurity ? '✅' : '❌'}</div>
+                    <div>X-Frame: {results.security.headers.xFrameOptions ? '✅' : '❌'}</div>
+                    <div>X-Content-Type: {results.security.headers.xContentTypeOptions ? '✅' : '❌'}</div>
+                    <div>Referrer Policy: {results.security.headers.referrerPolicy ? '✅' : '❌'}</div>
+                  </div>
+                </div>
+
+                {/* RGPD Info (mode complet seulement) */}
+                {results.rgpd && (
+                  <div className="mb-4">
+                    <h4 className="font-semibold text-blue-600 mb-2">Conformité RGPD</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                      <div>Bandeau cookies: {results.rgpd.hasCookieBanner ? '✅' : '❌'}</div>
+                      <div>Politique de confidentialité: {results.rgpd.hasPrivacyPolicy ? '✅' : '❌'}</div>
+                      <div>Mentions légales: {results.rgpd.hasTermsOfService ? '✅' : '❌'}</div>
+                      <div>Consentement GDPR: {results.rgpd.cookieConsentDetected ? '✅' : '❌'}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cookies Info (mode complet seulement) */}
+                {results.cookies && (
+                  <div className="mb-4">
+                    <h4 className="font-semibold text-orange-600 mb-2">
+                      Cookies ({results.cookies.total} total, {results.cookies.thirdParty} tiers)
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                      <div>Total: {results.cookies.total}</div>
+                      <div>Cookies tiers: {results.cookies.thirdParty}</div>
+                      <div>Sécurisés: {results.cookies.hasSecureFlags}/{results.cookies.total}</div>
+                    </div>
+                    {results.cookies.details.length > 0 && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-sm font-medium">Détail des cookies</summary>
+                        <div className="mt-2 max-h-32 overflow-y-auto">
+                          {results.cookies.details.map((cookie, index) => (
+                            <div key={index} className="text-xs p-1 border-b">
+                              <strong>{cookie.name}</strong> ({cookie.domain})
+                              {cookie.isThirdParty && <span className="text-red-500"> [Tiers]</span>}
+                              {cookie.secure && cookie.httpOnly && <span className="text-green-500"> [Sécurisé]</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                )}
+
+                {/* Security Recommendations */}
+                {results.securityRecommendations && results.securityRecommendations.length > 0 && (
+                  <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                    <h4 className="font-semibold text-red-800 mb-2">Recommandations Sécurité</h4>
+                    <ul className="text-sm space-y-1">
+                      {results.securityRecommendations.map((rec: string, index: number) => (
+                        <li key={index} className="text-red-700">• {rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* SEO Advanced Results (if available) */}
             {results.seoAdvanced && (
