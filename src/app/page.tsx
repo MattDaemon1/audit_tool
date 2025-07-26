@@ -58,10 +58,13 @@ interface AuditResult {
 
 export default function Home() {
   const [domain, setDomain] = useState('')
+  const [email, setEmail] = useState('')
+  const [sendByEmail, setSendByEmail] = useState(false)
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<AuditResult | null>(null)
   const [error, setError] = useState('')
   const [auditMode, setAuditMode] = useState<AuditMode>('fast')
+  const [emailSent, setEmailSent] = useState(false)
 
   const validateDomain = (url: string) => {
     const regex = /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}$/
@@ -78,28 +81,58 @@ export default function Home() {
     e.preventDefault()
     setError('')
     setResults(null)
+    setEmailSent(false)
 
     if (!validateDomain(domain)) {
       setError("Domaine invalide (ex: exemple.com)")
       return
     }
 
+    if (sendByEmail && !email) {
+      setError("Email requis pour l'envoi automatique")
+      return
+    }
+
+    if (sendByEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Format d'email invalide")
+      return
+    }
+
     setLoading(true)
 
     try {
-      const res = await fetch('/api/audit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain, mode: auditMode }),
-      })
+      // Si envoi par email demandé, utiliser l'endpoint spécialisé
+      if (sendByEmail) {
+        const res = await fetch('/api/send-audit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain, email, mode: auditMode }),
+        })
 
-      const data = await res.json()
+        const data = await res.json()
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Erreur inconnue')
+        if (!res.ok) {
+          throw new Error(data.error || 'Erreur inconnue')
+        }
+
+        setResults(data.auditResults)
+        setEmailSent(true)
+      } else {
+        // Audit normal sans email
+        const res = await fetch('/api/audit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain, mode: auditMode }),
+        })
+
+        const data = await res.json()
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Erreur inconnue')
+        }
+
+        setResults(data)
       }
-
-      setResults(data)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -110,7 +143,10 @@ export default function Home() {
   const resetForm = () => {
     setResults(null)
     setDomain('')
+    setEmail('')
     setError('')
+    setSendByEmail(false)
+    setEmailSent(false)
   }
 
   const downloadPdf = async () => {
@@ -209,11 +245,52 @@ export default function Home() {
                 />
               </div>
 
+              {/* Email Section */}
+              <div className="mb-4">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={sendByEmail}
+                    onChange={(e) => setSendByEmail(e.target.checked)}
+                    className="mr-2"
+                  />
+                  <span className="text-sm font-medium">📧 Recevoir le rapport par email (PDF inclus)</span>
+                </label>
+              </div>
+
+              {sendByEmail && (
+                <div className="mb-4">
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="votre.email@exemple.com"
+                    className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                    required
+                  />
+                  <p className="text-xs text-gray-600 mt-1">
+                    📋 Vous recevrez un rapport complet avec recommandations + PDF en pièce jointe
+                  </p>
+                </div>
+              )}
+
               {error && <p className="text-red-500 mb-4">{error}</p>}
               {loading && (
                 <p className="text-blue-500 mb-4">
-                  Audit {auditMode === 'fast' ? 'rapide' : 'complet'} en cours...
-                  {auditMode === 'fast' ? ' (~15s)' : ' (~45s)'}
+                  {sendByEmail ? (
+                    <>
+                      🔄 Audit {auditMode === 'fast' ? 'rapide' : 'complet'} en cours + envoi email...
+                      <br />
+                      <span className="text-sm">
+                        ({auditMode === 'fast' ? '~20s' : '~50s'} - Génération PDF incluse)
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      Audit {auditMode === 'fast' ? 'rapide' : 'complet'} en cours...
+                      {auditMode === 'fast' ? ' (~15s)' : ' (~45s)'}
+                    </>
+                  )}
                 </p>
               )}
 
@@ -222,7 +299,13 @@ export default function Home() {
                 disabled={loading}
                 className={`w-full py-3 text-white font-semibold rounded ${loading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
               >
-                {loading ? 'Analyse en cours...' : `Lancer audit ${auditMode === 'fast' ? 'rapide' : 'complet'}`}
+                {loading ? (
+                  sendByEmail ? 'Audit + Envoi email...' : 'Analyse en cours...'
+                ) : (
+                  sendByEmail
+                    ? `📧 Lancer audit ${auditMode === 'fast' ? 'rapide' : 'complet'} + Email`
+                    : `Lancer audit ${auditMode === 'fast' ? 'rapide' : 'complet'}`
+                )}
               </button>
             </form>
           </div>
@@ -230,25 +313,43 @@ export default function Home() {
           <div className="space-y-6">
             {/* Header */}
             <div className="bg-white p-6 rounded-lg shadow-md">
+              {emailSent && (
+                <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center">
+                    <svg className="w-5 h-5 text-green-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-green-800 font-medium">
+                      ✅ Rapport envoyé par email à {email}
+                    </span>
+                  </div>
+                  <p className="text-green-700 text-sm mt-1">
+                    Vérifiez votre boîte de réception (et vos spams) pour le rapport PDF complet.
+                  </p>
+                </div>
+              )}
+
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold">Résultats pour {domain}</h2>
                 <div className="flex gap-4 items-center">
                   <span className="text-sm text-gray-600">
                     Mode {results.mode} • {Math.round(results.executionTime / 1000)}s
                   </span>
-                  <button
-                    onClick={downloadPdf}
-                    disabled={loading}
-                    className={`px-4 py-2 text-white rounded flex items-center gap-2 ${loading
+                  {!emailSent && (
+                    <button
+                      onClick={downloadPdf}
+                      disabled={loading}
+                      className={`px-4 py-2 text-white rounded flex items-center gap-2 ${loading
                         ? 'bg-gray-400 cursor-not-allowed'
                         : 'bg-green-600 hover:bg-green-700'
-                      }`}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    {loading ? 'Génération...' : 'PDF'}
-                  </button>
+                        }`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      {loading ? 'Génération...' : 'PDF'}
+                    </button>
+                  )}
                   <button
                     onClick={resetForm}
                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
