@@ -54,12 +54,12 @@ export async function POST(request: NextRequest) {
             // Continuer sans PDF en cas d'erreur
         }
 
-        // 3. Envoyer l'email
+        // 3. Envoyer l'email (sans PDF temporairement pour debug)
         const emailResult = await emailService.sendAuditReport(
             email,
             domain,
-            auditResults,
-            pdfBase64
+            auditResults
+            // pdfBase64 // Temporairement commenté pour debug
         );
 
         if (!emailResult.success) {

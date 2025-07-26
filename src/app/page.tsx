@@ -192,8 +192,22 @@ export default function Home() {
   return (
     <main className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="text-center max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Audit de site web</h1>
-
+        <h1 className="text-3xl font-bold mb-6">Konnect Insights</h1>
+        <span className="text-lg text-gray-700 mb-4">
+          Avec{' '}
+          <a
+            href="https://mattkonnect.com"
+            target="_blank"
+            rel="noopener"
+            className="text-blue-600 underline hover:text-blue-800"
+            itemProp="author"
+            itemScope
+            itemType="http://schema.org/Person"
+          >
+            <span itemProp="name">Matt Konnect</span>
+          </a>
+          , votre partenaire pour l'audit SEO
+        </span>
         {!results ? (
           <div className="max-w-md mx-auto">
             <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md">
@@ -214,7 +228,6 @@ export default function Home() {
                     />
                     <span className="text-sm">
                       <strong>Rapide</strong> (~15s)<br />
-                      <span className="text-gray-600">Lighthouse + SEO de base</span>
                     </span>
                   </label>
                   <label className="flex items-center">
@@ -228,7 +241,6 @@ export default function Home() {
                     />
                     <span className="text-sm">
                       <strong>Complet</strong> (~45s)<br />
-                      <span className="text-gray-600">+ Analyse avancée</span>
                     </span>
                   </label>
                 </div>
@@ -302,7 +314,7 @@ export default function Home() {
                 {loading ? (
                   sendByEmail ? 'Audit + Envoi email...' : 'Analyse en cours...'
                 ) : (
-                  sendByEmail
+                  sendByEmail 
                     ? `📧 Lancer audit ${auditMode === 'fast' ? 'rapide' : 'complet'} + Email`
                     : `Lancer audit ${auditMode === 'fast' ? 'rapide' : 'complet'}`
                 )}
@@ -328,7 +340,7 @@ export default function Home() {
                   </p>
                 </div>
               )}
-
+              
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold">Résultats pour {domain}</h2>
                 <div className="flex gap-4 items-center">
@@ -340,8 +352,8 @@ export default function Home() {
                       onClick={downloadPdf}
                       disabled={loading}
                       className={`px-4 py-2 text-white rounded flex items-center gap-2 ${loading
-                        ? 'bg-gray-400 cursor-not-allowed'
-                        : 'bg-green-600 hover:bg-green-700'
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-green-600 hover:bg-green-700'
                         }`}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

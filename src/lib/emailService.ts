@@ -20,21 +20,31 @@ export class EmailService {
 
     async sendEmail(emailData: EmailData): Promise<{ success: boolean; messageId?: string; error?: string }> {
         try {
-            const payload = {
+            const payload: any = {
                 to: [{ email: emailData.to }],
                 sender: {
                     email: process.env.FROM_EMAIL || 'info@mattkonnect.com',
                     name: process.env.FROM_NAME || 'Konnect Insights by Matt Konnect'
                 },
                 subject: emailData.subject,
-                htmlContent: emailData.htmlContent,
-                ...(emailData.attachments && emailData.attachments.length > 0 && {
-                    attachment: emailData.attachments.map(att => ({
-                        name: att.name,
-                        content: att.content
-                    }))
-                })
+                htmlContent: emailData.htmlContent
             };
+
+            // Ajouter les pièces jointes si présentes
+            if (emailData.attachments && emailData.attachments.length > 0) {
+                payload.attachment = emailData.attachments.map(att => {
+                    // Nettoyer le contenu base64 (supprimer préfixe data: si présent)
+                    let cleanContent = att.content;
+                    if (cleanContent.includes(',')) {
+                        cleanContent = cleanContent.split(',')[1];
+                    }
+
+                    return {
+                        name: att.name,
+                        content: cleanContent
+                    };
+                });
+            }
 
             const response = await fetch('https://api.brevo.com/v3/smtp/email', {
                 method: 'POST',
@@ -48,6 +58,7 @@ export class EmailService {
 
             if (!response.ok) {
                 const errorData = await response.json();
+                console.error('Brevo API Error Details:', errorData);
                 throw new Error(`Brevo API Error: ${errorData.message || response.statusText}`);
             }
 
@@ -64,7 +75,9 @@ export class EmailService {
                 error: error.message || 'Erreur inconnue lors de l\'envoi'
             };
         }
-    } async sendAuditReport(
+    }
+
+    async sendAuditReport(
         email: string,
         domain: string,
         auditResults: any,
