@@ -142,21 +142,28 @@ export class EmailService {
                         // Vérifier que ce n'est pas vide
                         if (!str || str.length === 0) return false;
 
-                        // Vérifier le format base64
-                        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(str)) return false;
-
                         // Vérifier la longueur (doit être multiple de 4)
                         if (str.length % 4 !== 0) return false;
 
-                        // Test de décodage
-                        Buffer.from(str, 'base64');
+                        // Vérifier le format base64 (plus permissif pour le contenu PDF)
+                        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(str)) return false;
+
+                        // Test de décodage réel
+                        const decoded = Buffer.from(str, 'base64');
+
+                        // Vérifier que ce ressemble à un PDF (commence par %PDF)
+                        const header = decoded.subarray(0, 4).toString();
+                        if (header !== '%PDF') {
+                            console.warn('[EMAIL] Contenu décodé ne commence pas par %PDF:', header);
+                            return false;
+                        }
+
                         return true;
-                    } catch {
+                    } catch (error) {
+                        console.error('[EMAIL] Erreur validation base64:', error);
                         return false;
                     }
-                };
-
-                // Vérifier les contraintes Brevo (taille max ~10MB en base64)
+                };                // Vérifier les contraintes Brevo (taille max ~10MB en base64)
                 const maxSizeBytes = 8 * 1024 * 1024; // 8MB pour être sûr
                 const minSizeBytes = 1024; // 1KB minimum (PDF valide)
                 const estimatedSize = (cleanBase64.length * 3) / 4; // Taille réelle du fichier
@@ -204,222 +211,96 @@ export class EmailService {
         };
 
         return `
-<!DOCTYPE html>
-<html lang="fr" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="x-apple-disable-message-reformatting">
     <title>Audit SEO - ${domain}</title>
-    <!--[if mso]>
-    <noscript>
-        <xml>
-            <o:OfficeDocumentSettings>
-                <o:AllowPNG/>
-                <o:PixelsPerInch>96</o:PixelsPerInch>
-            </o:OfficeDocumentSettings>
-        </xml>
-    </noscript>
+    <!--[if gte mso 9]>
+    <xml>
+        <o:OfficeDocumentSettings>
+            <o:AllowPNG/>
+            <o:PixelsPerInch>96</o:PixelsPerInch>
+        </o:OfficeDocumentSettings>
+    </xml>
     <![endif]-->
-    <style>
-        /* Reset styles */
-        body, table, td, p, a, li, blockquote { -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
-        table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
-        img { -ms-interpolation-mode: bicubic; }
-        
-        /* Outlook specific */
-        .ReadMsgBody { width: 100%; }
-        .ExternalClass { width: 100%; }
-        .ExternalClass, .ExternalClass p, .ExternalClass span, .ExternalClass font, .ExternalClass td, .ExternalClass div { line-height: 100%; }
-        
-        /* General styles */
-        body { 
-            margin: 0 !important; 
-            padding: 0 !important; 
-            background-color: #f9fafb; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, Arial, sans-serif; 
-            line-height: 1.6; 
-            color: #333333; 
-        }
-        table { border-collapse: collapse; }
-        .container { 
-            max-width: 600px; 
-            margin: 0 auto; 
-            background-color: #ffffff; 
-            border-radius: 10px; 
-            overflow: hidden; 
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
-        }
-        .header { 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-            color: #ffffff; 
-            padding: 30px; 
-            text-align: center; 
-        }
-        .logo { 
-            font-size: 24px; 
-            font-weight: bold; 
-            margin-bottom: 10px; 
-            display: block;
-        }
-        .header-title {
-            font-size: 22px;
-            font-weight: bold;
-            margin: 10px 0;
-            color: #ffffff;
-        }
-        .header-subtitle {
-            font-size: 16px;
-            margin: 5px 0;
-            color: #ffffff;
-        }
-        .content { padding: 30px; }
-        .content-title {
-            font-size: 20px;
-            font-weight: bold;
-            margin-bottom: 20px;
-            color: #1f2937;
-        }
-        .score-table { 
-            width: 100%; 
-            margin: 20px 0; 
-        }
-        .score-card { 
-            background-color: #f8fafc; 
-            border-radius: 8px; 
-            padding: 15px; 
-            text-align: center; 
-            border-left: 4px solid #e5e7eb; 
-            margin: 10px 0;
-        }
-        .score-value { 
-            font-size: 24px; 
-            font-weight: bold; 
-            margin-bottom: 5px; 
-            display: block;
-        }
-        .score-label { 
-            font-size: 12px; 
-            color: #6b7280; 
-            text-transform: uppercase; 
-            font-weight: 600;
-        }
-        .cta-section { 
-            background-color: #f3f4f6; 
-            border-radius: 8px; 
-            padding: 20px; 
-            margin: 20px 0; 
-            text-align: center;
-        }
-        .cta-button { 
-            display: inline-block; 
-            background-color: #4f46e5; 
-            color: #ffffff !important; 
-            padding: 12px 24px; 
-            text-decoration: none; 
-            border-radius: 6px; 
-            font-weight: 600; 
-            margin: 5px; 
-            font-size: 14px;
-        }
-        .cta-secondary { background-color: #10b981 !important; }
-        .cta-tertiary { background-color: #f59e0b !important; }
-        .footer { 
-            background-color: #f9fafb; 
-            padding: 20px; 
-            text-align: center; 
-            color: #6b7280; 
-            font-size: 12px; 
-        }
-        .highlight { 
-            background-color: #fef3c7; 
-            padding: 2px 6px; 
-            border-radius: 4px; 
-        }
-        .alert { 
-            background-color: #fee2e2; 
-            border: 1px solid #fecaca; 
-            border-radius: 6px; 
-            padding: 15px; 
-            margin: 15px 0; 
-        }
-        .alert-title { 
-            font-weight: 600; 
-            color: #dc2626; 
-            margin-bottom: 5px; 
-        }
-        
-        /* Responsive */
-        @media only screen and (max-width: 600px) {
-            .container { margin: 0 !important; border-radius: 0 !important; }
-            .content { padding: 20px !important; }
-            .header { padding: 20px !important; }
-            .cta-button { display: block !important; margin: 10px 0 !important; }
-        }
+    <style type="text/css">
+        body, table, td, p, a, li { -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
+        table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-collapse: collapse; }
+        body { margin: 0; padding: 0; background-color: #f9fafb; font-family: Arial, sans-serif; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+        .header { background-color: #667eea; color: #ffffff; padding: 30px 20px; text-align: center; }
+        .content { padding: 30px 20px; }
+        .score-card { background-color: #f8fafc; padding: 15px; margin: 10px 0; text-align: center; border-radius: 8px; }
+        .score-value { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
+        .score-label { font-size: 12px; color: #6b7280; text-transform: uppercase; font-weight: 600; }
+        .cta-button { display: inline-block; background-color: #4f46e5; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 5px; }
+        .footer { background-color: #f9fafb; padding: 20px; text-align: center; color: #6b7280; font-size: 12px; }
     </style>
 </head>
 <body>
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f9fafb;">
         <tr>
-            <td align="center" style="padding: 20px;">
+            <td align="center" style="padding: 20px 0;">
                 <table class="container" role="presentation" cellspacing="0" cellpadding="0" border="0" width="600">
                     <!-- Header -->
                     <tr>
-                        <td class="header" align="center">
-                            <div class="logo">🔍 Konnect Insights</div>
-                            <div class="header-title">Votre audit SEO est prêt !</div>
-                            <div class="header-subtitle">Analyse complète de <strong>${domain}</strong></div>
+                        <td style="background-color: #667eea; color: #ffffff; padding: 30px 20px; text-align: center;">
+                            <h1 style="font-size: 24px; margin: 0 0 10px 0; color: #ffffff;">🔍 Konnect Insights</h1>
+                            <h2 style="font-size: 18px; margin: 10px 0; color: #ffffff;">Votre audit SEO est prêt !</h2>
+                            <p style="font-size: 14px; margin: 5px 0; color: #ffffff;">Analyse complète de <strong>${domain}</strong></p>
                         </td>
                     </tr>
                     
                     <!-- Content -->
                     <tr>
-                        <td class="content">
-                            <div class="content-title">📊 Résultats de l'audit</div>
+                        <td style="padding: 30px 20px;">
+                            <h3 style="font-size: 20px; margin-bottom: 20px; color: #1f2937;">📊 Résultats de l'audit</h3>
                             
-                            <!-- Scores Grid using Tables for Outlook compatibility -->
-                            <table class="score-table" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                            <!-- Scores -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                                 <tr>
-                                    <td width="48%" style="padding-right: 2%;">
-                                        <div class="score-card" style="border-left-color: ${getScoreColor(results.lighthouse.performance)};">
-                                            <div class="score-value" style="color: ${getScoreColor(results.lighthouse.performance)};">
+                                    <td width="48%" style="padding: 5px;">
+                                        <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-radius: 8px; border-left: 4px solid ${getScoreColor(results.lighthouse.performance)};">
+                                            <div style="font-size: 24px; font-weight: bold; margin-bottom: 5px; color: ${getScoreColor(results.lighthouse.performance)};">
                                                 ${getScoreEmoji(results.lighthouse.performance)} ${results.lighthouse.performance}
                                             </div>
-                                            <div class="score-label">Performance</div>
+                                            <div style="font-size: 12px; color: #6b7280; text-transform: uppercase;">Performance</div>
                                         </div>
                                     </td>
-                                    <td width="48%" style="padding-left: 2%;">
-                                        <div class="score-card" style="border-left-color: ${getScoreColor(results.lighthouse.seo)};">
-                                            <div class="score-value" style="color: ${getScoreColor(results.lighthouse.seo)};">
+                                    <td width="48%" style="padding: 5px;">
+                                        <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-radius: 8px; border-left: 4px solid ${getScoreColor(results.lighthouse.seo)};">
+                                            <div style="font-size: 24px; font-weight: bold; margin-bottom: 5px; color: ${getScoreColor(results.lighthouse.seo)};">
                                                 ${getScoreEmoji(results.lighthouse.seo)} ${results.lighthouse.seo}
                                             </div>
-                                            <div class="score-label">SEO</div>
+                                            <div style="font-size: 12px; color: #6b7280; text-transform: uppercase;">SEO</div>
                                         </div>
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td width="48%" style="padding-right: 2%;">
-                                        <div class="score-card" style="border-left-color: ${getScoreColor(results.lighthouse.accessibility)};">
-                                            <div class="score-value" style="color: ${getScoreColor(results.lighthouse.accessibility)};">
+                                    <td width="48%" style="padding: 5px;">
+                                        <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-radius: 8px; border-left: 4px solid ${getScoreColor(results.lighthouse.accessibility)};">
+                                            <div style="font-size: 24px; font-weight: bold; margin-bottom: 5px; color: ${getScoreColor(results.lighthouse.accessibility)};">
                                                 ${getScoreEmoji(results.lighthouse.accessibility)} ${results.lighthouse.accessibility}
                                             </div>
-                                            <div class="score-label">Accessibilité</div>
+                                            <div style="font-size: 12px; color: #6b7280; text-transform: uppercase;">Accessibilité</div>
                                         </div>
                                     </td>
-                                    <td width="48%" style="padding-left: 2%;">
-                                        <div class="score-card" style="border-left-color: ${getScoreColor(results.lighthouse.bestPractices)};">
-                                            <div class="score-value" style="color: ${getScoreColor(results.lighthouse.bestPractices)};">
+                                    <td width="48%" style="padding: 5px;">
+                                        <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-radius: 8px; border-left: 4px solid ${getScoreColor(results.lighthouse.bestPractices)};">
+                                            <div style="font-size: 24px; font-weight: bold; margin-bottom: 5px; color: ${getScoreColor(results.lighthouse.bestPractices)};">
                                                 ${getScoreEmoji(results.lighthouse.bestPractices)} ${results.lighthouse.bestPractices}
                                             </div>
-                                            <div class="score-label">Bonnes Pratiques</div>
+                                            <div style="font-size: 12px; color: #6b7280; text-transform: uppercase;">Bonnes Pratiques</div>
                                         </div>
                                     </td>
                                 </tr>
                             </table>
                             
-                            <h3>🔍 Points clés détectés</h3>
-                            <ul>
+                            <h3 style="margin: 30px 0 15px 0;">🔍 Points clés détectés</h3>
+                            <ul style="margin: 0; padding-left: 20px;">
                                 <li><strong>Titre :</strong> ${results.seoBasic.title ? '✅ Présent' : '❌ Manquant'}</li>
                                 <li><strong>Meta description :</strong> ${results.seoBasic.description ? '✅ Présente' : '❌ Manquante'}</li>
                                 <li><strong>H1 :</strong> ${results.seoBasic.h1?.length > 0 ? `✅ ${results.seoBasic.h1.length} trouvé(s)` : '❌ Aucun'}</li>
@@ -427,20 +308,20 @@ export class EmailService {
                             </ul>
 
                             ${results.lighthouse.seo < 80 || results.lighthouse.performance < 80 ? `
-                            <div class="alert">
-                                <div class="alert-title">⚠️ Points d'amélioration détectés</div>
-                                <p>Votre site présente des opportunités d'optimisation importantes. Le rapport détaillé en pièce jointe contient toutes les recommandations.</p>
+                            <div style="background-color: #fee2e2; border: 1px solid #fecaca; border-radius: 6px; padding: 15px; margin: 15px 0;">
+                                <div style="font-weight: 600; color: #dc2626; margin-bottom: 5px;">⚠️ Points d'amélioration détectés</div>
+                                <p style="margin: 0;">Votre site présente des opportunités d'optimisation importantes. Le rapport détaillé en pièce jointe contient toutes les recommandations.</p>
                             </div>
                             ` : ''}
 
-                            <div class="cta-section">
+                            <div style="background-color: #f3f4f6; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
                                 <h3 style="margin-top: 0;">🚀 Prochaines étapes</h3>
                                 <p>Choisissez l'option qui vous convient le mieux :</p>
                                 
                                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                                     <tr>
                                         <td align="center" style="padding: 10px 0;">
-                                            <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://audit.mattkonnect.com'}/contact" class="cta-button">
+                                            <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://audit.mattkonnect.com'}/contact" style="display: inline-block; background-color: #4f46e5; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">
                                                 ✅ Corriger mon site
                                             </a>
                                             <br><small style="color: #6b7280;">Recevez un audit complet + plan d'action détaillé</small>
@@ -448,7 +329,7 @@ export class EmailService {
                                     </tr>
                                     <tr>
                                         <td align="center" style="padding: 10px 0;">
-                                            <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://audit.mattkonnect.com'}/marque-blanche" class="cta-button cta-secondary">
+                                            <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://audit.mattkonnect.com'}/marque-blanche" style="display: inline-block; background-color: #10b981; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">
                                                 🚀 Passer à la version agence
                                             </a>
                                             <br><small style="color: #6b7280;">Obtenez des audits en marque blanche</small>
@@ -456,7 +337,7 @@ export class EmailService {
                                     </tr>
                                     <tr>
                                         <td align="center" style="padding: 10px 0;">
-                                            <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://audit.mattkonnect.com'}/" class="cta-button cta-tertiary">
+                                            <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'https://audit.mattkonnect.com'}/" style="display: inline-block; background-color: #f59e0b; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">
                                                 🔁 Effectuer un nouvel audit
                                             </a>
                                             <br><small style="color: #6b7280;">Scanner un autre site maintenant</small>
@@ -479,7 +360,7 @@ export class EmailService {
                     
                     <!-- Footer -->
                     <tr>
-                        <td class="footer">
+                        <td style="background-color: #f9fafb; padding: 20px; text-align: center; color: #6b7280; font-size: 12px;">
                             <p>© 2025 Konnect Insights by Matt Konnect - Tous droits réservés</p>
                             <p>Cet email vous a été envoyé suite à votre demande d'audit SEO pour ${domain}</p>
                         </td>

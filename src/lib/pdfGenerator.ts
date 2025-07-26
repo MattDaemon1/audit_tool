@@ -2,91 +2,101 @@ import puppeteer from 'puppeteer';
 import { HybridAuditResult } from './auditOrchestrator';
 
 export interface PdfGenerationOptions {
-    includeDetails?: boolean;
-    includeRecommendations?: boolean;
-    format?: 'A4' | 'Letter';
-    margin?: {
-        top?: string;
-        right?: string;
-        bottom?: string;
-        left?: string;
-    };
+  includeDetails?: boolean;
+  includeRecommendations?: boolean;
+  format?: 'A4' | 'Letter';
+  margin?: {
+    top?: string;
+    right?: string;
+    bottom?: string;
+    left?: string;
+  };
 }
 
 export async function generateAuditPdf(
-    domain: string,
-    auditResults: HybridAuditResult,
-    options: PdfGenerationOptions = {}
+  domain: string,
+  auditResults: HybridAuditResult,
+  options: PdfGenerationOptions = {}
 ): Promise<Buffer> {
-    const {
-        includeDetails = true,
-        includeRecommendations = true,
-        format = 'A4',
-        margin = { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' }
-    } = options;
+  const {
+    includeDetails = true,
+    includeRecommendations = true,
+    format = 'A4',
+    margin = { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' }
+  } = options;
 
-    const browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+
+  try {
+    const page = await browser.newPage();
+
+    // Injecter Tailwind CSS
+    await page.addStyleTag({
+      url: 'https://cdn.tailwindcss.com'
     });
 
-    try {
-        const page = await browser.newPage();
+    // Générer le contenu HTML
+    const htmlContent = generateReportHtml(domain, auditResults, { includeDetails, includeRecommendations });
 
-        // Injecter Tailwind CSS
-        await page.addStyleTag({
-            url: 'https://cdn.tailwindcss.com'
-        });
+    await page.setContent(htmlContent, {
+      waitUntil: 'networkidle0'
+    });
 
-        // Générer le contenu HTML
-        const htmlContent = generateReportHtml(domain, auditResults, { includeDetails, includeRecommendations });
+    // Attendre que Tailwind soit chargé
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
-        await page.setContent(htmlContent, {
-            waitUntil: 'networkidle0'
-        });
+    // Générer le PDF avec options optimisées
+    const pdfBuffer = await page.pdf({
+      format: format,
+      margin: margin,
+      printBackground: true,
+      preferCSSPageSize: true,
+      // Options pour réduire la taille et améliorer la compatibilité
+      omitBackground: false,
+      timeout: 60000, // 60 secondes timeout
+    });
 
-        // Attendre que Tailwind soit chargé
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Générer le PDF
-        const pdfBuffer = await page.pdf({
-            format: format,
-            margin: margin,
-            printBackground: true,
-            preferCSSPageSize: true
-        });
-
-        return pdfBuffer;
-
-    } finally {
-        await browser.close();
+    // Vérifier que le PDF est valide
+    if (!pdfBuffer || pdfBuffer.length === 0) {
+      throw new Error('Erreur génération PDF: buffer vide');
     }
+
+    console.log(`[PDF] Généré avec succès: ${Math.round(pdfBuffer.length / 1024)}Ko`);
+    return Buffer.from(pdfBuffer);
+
+  } finally {
+    await browser.close();
+  }
 }
 
+
 function generateReportHtml(
-    domain: string,
-    results: HybridAuditResult,
-    options: { includeDetails: boolean; includeRecommendations: boolean }
+  domain: string,
+  results: HybridAuditResult,
+  options: { includeDetails: boolean; includeRecommendations: boolean }
 ): string {
-    const currentDate = new Date().toLocaleDateString('fr-FR', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-    });
+  const currentDate = new Date().toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
 
-    const getScoreColor = (score: number): string => {
-        if (score >= 80) return 'text-green-600 bg-green-100';
-        if (score >= 60) return 'text-yellow-600 bg-yellow-100';
-        return 'text-red-600 bg-red-100';
-    };
+  const getScoreColor = (score: number): string => {
+    if (score >= 80) return 'text-green-600 bg-green-100';
+    if (score >= 60) return 'text-yellow-600 bg-yellow-100';
+    return 'text-red-600 bg-red-100';
+  };
 
-    const getScoreBadgeColor = (score: number): string => {
-        if (score >= 80) return 'bg-green-500';
-        if (score >= 60) return 'bg-yellow-500';
-        return 'bg-red-500';
-    };
+  const getScoreBadgeColor = (score: number): string => {
+    if (score >= 80) return 'bg-green-500';
+    if (score >= 60) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
 
-    return `
+  return `
 <!DOCTYPE html>
 <html lang="fr">
 <head>
