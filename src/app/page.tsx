@@ -357,7 +357,7 @@ export default function Home() {
 
             {/* SEO Basic Results */}
             <div className="bg-white p-6 rounded-lg shadow-md">
-              <h3 className="text-xl font-semibold mb-4">Analyse SEO de base (Cheerio)</h3>
+              <h3 className="text-xl font-semibold mb-4">Analyse SEO de base</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
                   <strong>Titre:</strong> {results.seoBasic.title || '❌ Manquant'}
@@ -456,7 +456,7 @@ export default function Home() {
             {/* SEO Advanced Results (if available) */}
             {results.seoAdvanced && (
               <div className="bg-white p-6 rounded-lg shadow-md">
-                <h3 className="text-xl font-semibold mb-4">Analyse SEO avancée (Puppeteer)</h3>
+                <h3 className="text-xl font-semibold mb-4">Analyse SEO avancée</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                   <div>
                     <h4 className="font-semibold text-green-600 mb-2">Structure HTML</h4>
