@@ -59,7 +59,6 @@ interface AuditResult {
 export default function Home() {
   const [domain, setDomain] = useState('')
   const [email, setEmail] = useState('')
-  const [sendByEmail, setSendByEmail] = useState(false)
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<AuditResult | null>(null)
   const [error, setError] = useState('')
@@ -88,12 +87,12 @@ export default function Home() {
       return
     }
 
-    if (sendByEmail && !email) {
-      setError("Email requis pour l'envoi automatique")
+    if (!email) {
+      setError("Email requis")
       return
     }
 
-    if (sendByEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setError("Format d'email invalide")
       return
     }
@@ -101,38 +100,21 @@ export default function Home() {
     setLoading(true)
 
     try {
-      // Si envoi par email demandé, utiliser l'endpoint spécialisé
-      if (sendByEmail) {
-        const res = await fetch('/api/send-audit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ domain, email, mode: auditMode }),
-        })
+      // Toujours utiliser l'endpoint avec email
+      const res = await fetch('/api/send-audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain, email, mode: auditMode }),
+      })
 
-        const data = await res.json()
+      const data = await res.json()
 
-        if (!res.ok) {
-          throw new Error(data.error || 'Erreur inconnue')
-        }
-
-        setResults(data.auditResults)
-        setEmailSent(true)
-      } else {
-        // Audit normal sans email
-        const res = await fetch('/api/audit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ domain, mode: auditMode }),
-        })
-
-        const data = await res.json()
-
-        if (!res.ok) {
-          throw new Error(data.error || 'Erreur inconnue')
-        }
-
-        setResults(data)
+      if (!res.ok) {
+        throw new Error(data.error || 'Erreur inconnue')
       }
+
+      setResults(data.auditResults)
+      setEmailSent(true)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -145,7 +127,6 @@ export default function Home() {
     setDomain('')
     setEmail('')
     setError('')
-    setSendByEmail(false)
     setEmailSent(false)
   }
 
@@ -257,52 +238,32 @@ export default function Home() {
                 />
               </div>
 
-              {/* Email Section */}
+              {/* Email obligatoire */}
               <div className="mb-4">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={sendByEmail}
-                    onChange={(e) => setSendByEmail(e.target.checked)}
-                    className="mr-2"
-                  />
-                  <span className="text-sm font-medium">📧 Recevoir le rapport par email (PDF inclus)</span>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  📧 Nous vous envoyons l'audit par email
                 </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="votre.email@exemple.com"
+                  className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                  required
+                />
+                <p className="text-xs text-gray-600 mt-1">
+                  📋 Vous recevrez un rapport complet avec recommandations par email
+                </p>
               </div>
-
-              {sendByEmail && (
-                <div className="mb-4">
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="votre.email@exemple.com"
-                    className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-                    required
-                  />
-                  <p className="text-xs text-gray-600 mt-1">
-                    📋 Vous recevrez un rapport complet avec recommandations + PDF en pièce jointe
-                  </p>
-                </div>
-              )}
 
               {error && <p className="text-red-500 mb-4">{error}</p>}
               {loading && (
                 <p className="text-blue-500 mb-4">
-                  {sendByEmail ? (
-                    <>
-                      🔄 Audit {auditMode === 'fast' ? 'rapide' : 'complet'} en cours + envoi email...
-                      <br />
-                      <span className="text-sm">
-                        ({auditMode === 'fast' ? '~20s' : '~50s'} - Génération PDF incluse)
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      Audit {auditMode === 'fast' ? 'rapide' : 'complet'} en cours...
-                      {auditMode === 'fast' ? ' (~15s)' : ' (~45s)'}
-                    </>
-                  )}
+                  🔄 Audit {auditMode === 'fast' ? 'rapide' : 'complet'} en cours + envoi email...
+                  <br />
+                  <span className="text-sm">
+                    ({auditMode === 'fast' ? '~20s' : '~50s'} - Génération PDF incluse)
+                  </span>
                 </p>
               )}
 
@@ -311,13 +272,7 @@ export default function Home() {
                 disabled={loading}
                 className={`w-full py-3 text-white font-semibold rounded ${loading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
               >
-                {loading ? (
-                  sendByEmail ? 'Audit + Envoi email...' : 'Analyse en cours...'
-                ) : (
-                  sendByEmail 
-                    ? `📧 Lancer audit ${auditMode === 'fast' ? 'rapide' : 'complet'} + Email`
-                    : `Lancer audit ${auditMode === 'fast' ? 'rapide' : 'complet'}`
-                )}
+                {loading ? 'Audit + Envoi email...' : `📧 Lancer audit ${auditMode === 'fast' ? 'rapide' : 'complet'} + Email`}
               </button>
             </form>
           </div>
@@ -340,7 +295,7 @@ export default function Home() {
                   </p>
                 </div>
               )}
-              
+
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold">Résultats pour {domain}</h2>
                 <div className="flex gap-4 items-center">
@@ -352,8 +307,8 @@ export default function Home() {
                       onClick={downloadPdf}
                       disabled={loading}
                       className={`px-4 py-2 text-white rounded flex items-center gap-2 ${loading
-                          ? 'bg-gray-400 cursor-not-allowed'
-                          : 'bg-green-600 hover:bg-green-700'
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-green-600 hover:bg-green-700'
                         }`}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

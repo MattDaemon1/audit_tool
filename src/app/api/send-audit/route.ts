@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
             email,
             domain,
             auditResults,
-            pdfBase64
+            pdfBase64 // PDF réactivé avec validation améliorée
         );
 
         if (!emailResult.success) {
