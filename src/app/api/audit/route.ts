@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runHybridAudit, AuditMode } from '@/lib/auditOrchestrator'
 import { securityLogger } from '@/lib/securityLogger'
+import { AuditService } from '@/lib/auditService'
+import { CacheService } from '@/lib/cacheService'
+import { v4 as uuidv4 } from 'uuid'
 
 // Force Node.js runtime for Lighthouse compatibility
 export const runtime = 'nodejs'
@@ -116,12 +119,48 @@ export async function POST(req: NextRequest) {
         }
 
         const auditMode: AuditMode = mode === 'complete' ? 'complete' : 'fast'
+        const requestId = uuidv4()
 
         // Log de l'audit légitime
-        securityLogger.logAuditRequest(ip, userAgent, domain, 'direct-api', auditMode)
-        console.log(`[API] Audit ${auditMode} sécurisé de : ${domain} (IP: ${ip})`)
+        await securityLogger.logAuditRequest(ip, userAgent, domain, 'direct-api', auditMode)
+        console.log(`[API] Audit ${auditMode} sécurisé de : ${domain} (IP: ${ip}) [ID: ${requestId}]`)
 
-        const results = await runHybridAudit(domain, auditMode)
+        // Vérifier le cache d'abord
+        const cachedResult = await CacheService.getCachedAudit(domain, auditMode)
+        let results: any
+
+        if (cachedResult) {
+            console.log(`[API] Utilisation du cache pour ${domain} (${auditMode})`)
+            results = cachedResult
+            await securityLogger.logAuditRequest(ip, userAgent, domain, 'direct-api-cached', auditMode)
+        } else {
+            // Exécuter l'audit
+            results = await runHybridAudit(domain, auditMode)
+            console.log(`[API] Audit terminé en ${Math.round((results.executionTime || 0) / 1000)}s`)
+
+            // Sauvegarder en base et cache
+            try {
+                await AuditService.saveAudit({
+                    domain,
+                    email: '',
+                    mode: auditMode,
+                    ipAddress: ip,
+                    userAgent,
+                    requestId,
+                    results,
+                    executionTime: results.executionTime || 0,
+                    pdfGenerated: false,
+                    emailSent: false
+                })
+
+                await CacheService.setCachedAudit(domain, auditMode, results)
+
+                await securityLogger.logAuditRequest(ip, userAgent, domain, 'direct-api-new', auditMode)
+            } catch (error) {
+                await securityLogger.logSuspiciousActivity(ip, userAgent, `Erreur sauvegarde audit: ${error instanceof Error ? error.message : 'Erreur inconnue'}`)
+                // Continue même si la sauvegarde échoue
+            }
+        }
 
         return NextResponse.json({
             success: true,
