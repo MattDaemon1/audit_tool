@@ -21,12 +21,30 @@ export async function runSeoAudit(domain: string): Promise<SeoAuditResult> {
         })
 
         if (!res.ok) {
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+            // Pour les erreurs 404 ou autres, on retourne des données partielles
+            // au lieu de faire échouer complètement l'audit
+            console.warn(`[SEO-CHEERIO] Site inaccessible (${res.status}): ${url}`)
+            return {
+                title: null,
+                description: null,
+                h1: [],
+                canonical: null,
+                hasRobotsTxt: false,
+                hasSitemap: false
+            }
         }
 
         html = await res.text()
     } catch (error) {
-        throw new Error(`Impossible de récupérer la page: ${url} - ${error}`)
+        console.warn(`[SEO-CHEERIO] Erreur de connexion: ${url} - ${error}`)
+        return {
+            title: null,
+            description: null,
+            h1: [],
+            canonical: null,
+            hasRobotsTxt: false,
+            hasSitemap: false
+        }
     }
 
     const $ = cheerio.load(html)
