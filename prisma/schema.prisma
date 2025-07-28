@@ -1,0 +1,152 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Modèle pour stocker les audits SEO
+model Audit {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Informations de la requête
+  domain    String
+  email     String
+  mode      String   // 'fast' ou 'complete'
+  
+  // Métadonnées de sécurité
+  ipAddress    String?
+  userAgent    String?
+  requestId    String?  @unique
+  
+  // Résultats de l'audit (JSON)
+  lighthouseResults   Json?
+  seoBasicResults     Json?
+  securityResults     Json?
+  rgpdResults         Json?
+  cookiesResults      Json?
+  seoAdvancedResults  Json?
+  
+  // Métriques
+  executionTime     Int      // en millisecondes
+  pdfGenerated      Boolean  @default(false)
+  emailSent         Boolean  @default(false)
+  emailMessageId    String?
+  
+  // Statut
+  status           String   @default("completed") // 'pending', 'completed', 'failed'
+  errorMessage     String?
+  
+  // Index pour optimiser les requêtes
+  @@index([domain])
+  @@index([email])
+  @@index([createdAt])
+  @@index([ipAddress])
+}
+
+// Modèle pour le cache des résultats
+model AuditCache {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  
+  domain    String
+  mode      String
+  
+  // Résultats mis en cache
+  results   Json
+  
+  // Index unique pour éviter les doublons
+  @@unique([domain, mode])
+  @@index([expiresAt])
+}
+
+// Modèle pour les logs de sécurité persistants
+model SecurityLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  
+  // Type d'événement
+  type      String   // 'security', 'audit', 'error', 'rate_limit'
+  severity  String   // 'low', 'medium', 'high', 'critical'
+  
+  // Informations de la requête
+  ipAddress   String
+  userAgent   String?
+  endpoint    String?
+  
+  // Données liées à l'audit
+  domain      String?
+  email       String?
+  
+  // Message et détails
+  message     String
+  details     Json?
+  
+  // Index pour optimiser les requêtes de sécurité
+  @@index([type])
+  @@index([severity])
+  @@index([ipAddress])
+  @@index([createdAt])
+}
+
+// Modèle pour les statistiques
+model Statistics {
+  id        String   @id @default(cuid())
+  date      DateTime @default(now())
+  
+  // Compteurs quotidiens
+  totalAudits       Int @default(0)
+  fastAudits        Int @default(0)
+  completeAudits    Int @default(0)
+  
+  // Compteurs d'emails
+  emailsSent        Int @default(0)
+  emailsFailed      Int @default(0)
+  
+  // Compteurs de sécurité
+  securityEvents    Int @default(0)
+  rateLimitHits     Int @default(0)
+  
+  // Performance
+  avgExecutionTime  Float?
+  
+  // Index unique par jour
+  @@unique([date])
+}
+
+// Modèle pour les domaines populaires
+model PopularDomain {
+  id        String   @id @default(cuid())
+  domain    String   @unique
+  
+  // Compteurs
+  auditCount        Int      @default(1)
+  lastAuditAt       DateTime @default(now())
+  
+  // Derniers résultats moyens
+  avgPerformance    Float?
+  avgSeo            Float?
+  avgAccessibility  Float?
+  avgBestPractices  Float?
+  
+  @@index([auditCount])
+  @@index([lastAuditAt])
+}
+
+// Modèle pour les configurations système
+model SystemConfig {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runHybridAudit } from '@/lib/auditOrchestrator';
 import { generateAuditPdf } from '@/lib/pdfGenerator';
 import { emailService } from '@/lib/emailService';
+import { securityLogger } from '@/lib/securityLogger';
+import { AuditService } from '@/lib/auditService';
+import { CacheService } from '@/lib/cacheService';
+import { v4 as uuidv4 } from 'uuid';
 
 // Force Node.js runtime for Lighthouse compatibility
 export const runtime = 'nodejs'
