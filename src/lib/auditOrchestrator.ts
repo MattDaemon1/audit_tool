@@ -70,8 +70,21 @@ export async function runHybridAudit(domain: string, mode: AuditMode = 'fast'): 
         // 1. Lighthouse audit (toujours exécuté)
         console.log(`[AUDIT] Démarrage audit Lighthouse pour ${domain}`)
         const lighthouseStart = Date.now()
-        const lighthouseResult = await runLighthouseAudit(domain)
-        console.log(`[AUDIT] Lighthouse terminé en ${Date.now() - lighthouseStart}ms`)
+        let lighthouseResult
+        try {
+            lighthouseResult = await runLighthouseAudit(domain)
+            console.log(`[AUDIT] Lighthouse terminé en ${Date.now() - lighthouseStart}ms`)
+        } catch (error) {
+            console.error(`[AUDIT] Erreur Lighthouse:`, error)
+            // Valeurs par défaut en cas d'erreur
+            lighthouseResult = {
+                seo: 0,
+                performance: 0,
+                accessibility: 0,
+                bestPractices: 0,
+            }
+            console.log(`[AUDIT] Lighthouse a échoué, valeurs par défaut appliquées`)
+        }
 
         // 2. SEO de base avec Cheerio (rapide)
         console.log(`[AUDIT] Démarrage audit SEO de base (Cheerio)`)
@@ -112,6 +125,12 @@ export async function runHybridAudit(domain: string, mode: AuditMode = 'fast'): 
                 cookiesData = rgpdSecurityResult.cookies
                 securityRecommendations = [...securityRecommendations, ...rgpdSecurityResult.recommendations]
                 console.log(`[AUDIT] RGPD & Sécurité avancé terminé en ${Date.now() - rgpdStart}ms`)
+                console.log(`[AUDIT] Résultats RGPD:`, {
+                    hasCookieBanner: rgpdData?.hasCookieBanner,
+                    hasPrivacyPolicy: rgpdData?.hasPrivacyPolicy,
+                    hasTermsOfService: rgpdData?.hasTermsOfService,
+                    cookieConsentDetected: rgpdData?.cookieConsentDetected
+                })
             } catch (error) {
                 console.error(`[AUDIT] Erreur RGPD & Sécurité:`, error)
                 // Continue avec les données de base seulement
