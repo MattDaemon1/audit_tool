@@ -66,54 +66,8 @@ export default function Home() {
   const [emailSent, setEmailSent] = useState(false)
 
   const validateDomain = (url: string) => {
-    // Nettoyage et validation stricte du domaine
-    const cleanUrl = url.trim().toLowerCase()
-
-    // Protection contre les injections et caractères malveillants
-    if (cleanUrl.includes('<') || cleanUrl.includes('>') || cleanUrl.includes('"') ||
-      cleanUrl.includes("'") || cleanUrl.includes('&') || cleanUrl.includes('javascript:') ||
-      cleanUrl.includes('data:') || cleanUrl.includes('vbscript:') || cleanUrl.includes('file:')) {
-      return false
-    }
-
-    // Validation stricte du format domaine
-    const regex = /^(https?:\/\/)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/
-    if (!regex.test(cleanUrl)) return false
-
-    // Protection contre les domaines locaux et privés
-    const blockedDomains = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '10.', '192.168.', '172.']
-    if (blockedDomains.some(blocked => cleanUrl.includes(blocked))) {
-      return false
-    }
-
-    // Limite de longueur
-    return cleanUrl.length <= 253
-  }
-
-  const validateEmail = (email: string) => {
-    // Nettoyage et validation stricte de l'email
-    const cleanEmail = email.trim().toLowerCase()
-
-    // Protection contre les injections
-    if (cleanEmail.includes('<') || cleanEmail.includes('>') || cleanEmail.includes('"') ||
-      cleanEmail.includes("'") || cleanEmail.includes('&') || cleanEmail.includes('script')) {
-      return false
-    }
-
-    // Validation RFC compliant mais stricte
-    const emailRegex = /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/
-
-    // Limite de longueur
-    return emailRegex.test(cleanEmail) && cleanEmail.length <= 254
-  }
-
-  const sanitizeInput = (input: string) => {
-    return input.trim()
-      .replace(/[<>]/g, '') // Retire les balises HTML
-      .replace(/['"]/g, '') // Retire les quotes
-      .replace(/javascript:/gi, '') // Protection XSS
-      .replace(/data:/gi, '') // Protection data URLs
-      .substring(0, 100) // Limite de taille
+    const regex = /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}$/
+    return regex.test(url)
   }
 
   const getScoreColor = (score: number) => {
@@ -128,54 +82,30 @@ export default function Home() {
     setResults(null)
     setEmailSent(false)
 
-    // Sanitisation et validation stricte
-    const cleanDomain = sanitizeInput(domain)
-    const cleanEmail = sanitizeInput(email)
-
-    if (!validateDomain(cleanDomain)) {
-      setError("Domaine invalide ou potentiellement dangereux")
+    if (!validateDomain(domain)) {
+      setError("Domaine invalide (ex: exemple.com)")
       return
     }
 
-    if (!cleanEmail) {
+    if (!email) {
       setError("Email requis")
       return
     }
 
-    if (!validateEmail(cleanEmail)) {
-      setError("Format d'email invalide ou potentiellement dangereux")
-      return
-    }
-
-    // Protection contre les attaques par déni de service
-    if (loading) {
-      setError("Une demande est déjà en cours")
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Format d'email invalide")
       return
     }
 
     setLoading(true)
 
     try {
-      // Timeout de sécurité pour éviter les blocages
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minutes max
-
+      // Toujours utiliser l'endpoint avec email
       const res = await fetch('/api/send-audit', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest' // Protection CSRF basique
-        },
-        body: JSON.stringify({
-          domain: cleanDomain,
-          email: cleanEmail,
-          mode: auditMode,
-          timestamp: Date.now() // Anti-replay
-        }),
-        signal: controller.signal
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain, email, mode: auditMode }),
       })
-
-      clearTimeout(timeoutId)
 
       const data = await res.json()
 
@@ -185,16 +115,8 @@ export default function Home() {
 
       setResults(data.auditResults)
       setEmailSent(true)
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          setError('Timeout: La demande a pris trop de temps')
-        } else {
-          setError(error.message || 'Erreur lors de l\'audit')
-        }
-      } else {
-        setError('Erreur inattendue')
-      }
+    } catch (err: any) {
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -211,100 +133,336 @@ export default function Home() {
   const downloadPdf = async () => {
     if (!results || !domain) return;
 
-    // Protection contre les téléchargements multiples
-    if (loading) {
-      setError("Génération PDF déjà en cours")
-      return
-    }
-
     try {
       setLoading(true);
-
-      // Timeout de sécurité
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 60000) // 1 minute max pour PDF
-
       const response = await fetch('/api/pdf', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          domain: sanitizeInput(domain),
+          domain,
           mode: results.mode,
           options: {
             includeDetails: results.mode === 'complete',
             includeRecommendations: true
-          },
-          timestamp: Date.now()
+          }
         }),
-        signal: controller.signal
       });
-
-      clearTimeout(timeoutId)
 
       if (!response.ok) {
         throw new Error('Erreur lors de la génération du PDF');
       }
 
-      // Vérification du type de contenu pour sécurité
-      const contentType = response.headers.get('content-type')
-      if (!contentType?.includes('application/pdf')) {
-        throw new Error('Type de fichier inattendu')
-      }
-
-      // Télécharger le fichier avec nom sécurisé
+      // Télécharger le fichier
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-
-      // Nom de fichier sécurisé
-      const safeDomain = sanitizeInput(domain).replace(/[^a-z0-9]/gi, '-')
-      const safeDate = new Date().toISOString().split('T')[0]
-      a.download = `audit-${safeDomain}-${safeDate}.pdf`;
-
+      a.download = `audit-${domain}-${new Date().toISOString().split('T')[0]}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        if (err.name === 'AbortError') {
-          setError('Timeout: Génération PDF trop longue')
-        } else {
-          setError(`Erreur PDF: ${err.message}`)
-        }
-      } else {
-        setError('Erreur inattendue lors de la génération PDF')
-      }
+    } catch (err: any) {
+      setError(`Erreur PDF: ${err.message}`);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="text-center max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Konnect Insights</h1>
-        <span className="text-lg text-gray-700 mb-4">
-          Avec{' '}
-          <a
-            href="https://mattkonnect.com"
-            target="_blank"
-            rel="noopener"
-            className="text-blue-600 underline hover:text-blue-800"
-            itemProp="author"
-            itemScope
-            itemType="http://schema.org/Person"
-          >
-            <span itemProp="name">Matt Konnect</span>
-          </a>
-          , votre partenaire pour l'audit SEO
-        </span>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      {/* Header moderne */}
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-6xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">K</span>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">Konnect Insights</h1>
+                <p className="text-sm text-gray-600">Audit SEO professionnel instantané</p>
+              </div>
+            </div>
+            <div className="hidden md:flex items-center space-x-6">
+              <a href="#pricing" className="text-gray-600 hover:text-blue-600 transition-colors">Tarifs</a>
+              <button className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg hover:shadow-lg transition-all">
+                🚀 Marque Blanche
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-4 py-8">
         {!results ? (
+          <>
+            {/* Hero Section */}
+            <div className="text-center mb-12">
+              <div className="inline-flex items-center bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium mb-4">
+                🎉 Audit gratuit • Rapport PDF inclus
+              </div>
+              <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+                Auditez votre site en 
+                <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent"> 30 secondes</span>
+              </h1>
+              <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+                Obtenez un rapport SEO complet avec scores de performance, recommandations personnalisées et plan d'action détaillé.
+              </p>
+            </div>
+
+            {/* Pricing Cards - MONÉTISATION */}
+            <div className="grid md:grid-cols-3 gap-6 mb-12" id="pricing">
+              {/* Gratuit */}
+              <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 relative">
+                <div className="text-center">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Audit Gratuit</h3>
+                  <div className="text-3xl font-bold text-gray-900 mb-4">0€</div>
+                  <p className="text-gray-600 mb-6">Pour découvrir les problèmes de base</p>
+                  <ul className="text-left space-y-3 mb-6">
+                    <li className="flex items-center text-sm">
+                      <span className="w-4 h-4 text-green-500 mr-2">✓</span>
+                      Scores Lighthouse complets
+                    </li>
+                    <li className="flex items-center text-sm">
+                      <span className="w-4 h-4 text-green-500 mr-2">✓</span>
+                      Analyse SEO de base
+                    </li>
+                    <li className="flex items-center text-sm">
+                      <span className="w-4 h-4 text-green-500 mr-2">✓</span>
+                      Rapport PDF instantané
+                    </li>
+                    <li className="flex items-center text-sm text-gray-400">
+                      <span className="w-4 h-4 text-gray-300 mr-2">✗</span>
+                      Analyse RGPD approfondie
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Premium */}
+              <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl shadow-xl border-2 border-blue-500 p-6 relative transform scale-105">
+                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                  <span className="bg-yellow-400 text-yellow-900 px-3 py-1 rounded-full text-xs font-bold">
+                    ⭐ POPULAIRE
+                  </span>
+                </div>
+                <div className="text-center">
+                  <h3 className="text-lg font-semibold text-white mb-2">Audit Complet</h3>
+                  <div className="text-3xl font-bold text-white mb-4">
+                    47€ <span className="text-lg font-normal opacity-80">/ audit</span>
+                  </div>
+                  <p className="text-blue-100 mb-6">Tout ce qu'il faut pour optimiser</p>
+                  <ul className="text-left space-y-3 mb-6">
+                    <li className="flex items-center text-sm text-white">
+                      <span className="w-4 h-4 text-green-400 mr-2">✓</span>
+                      Tout de l'audit gratuit
+                    </li>
+                    <li className="flex items-center text-sm text-white">
+                      <span className="w-4 h-4 text-green-400 mr-2">✓</span>
+                      Analyse RGPD + Cookies
+                    </li>
+                    <li className="flex items-center text-sm text-white">
+                      <span className="w-4 h-4 text-green-400 mr-2">✓</span>
+                      Plan d'action personnalisé
+                    </li>
+                    <li className="flex items-center text-sm text-white">
+                      <span className="w-4 h-4 text-green-400 mr-2">✓</span>
+                      Support par email
+                    </li>
+                  </ul>
+                  <button 
+                    onClick={() => setAuditMode('complete')}
+                    className="w-full bg-white text-blue-600 font-semibold py-3 px-4 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Choisir l'audit complet
+                  </button>
+                </div>
+              </div>
+
+              {/* Agence */}
+              <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 relative">
+                <div className="text-center">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Marque Blanche</h3>
+                  <div className="text-3xl font-bold text-gray-900 mb-4">
+                    297€ <span className="text-lg font-normal text-gray-600">/ mois</span>
+                  </div>
+                  <p className="text-gray-600 mb-6">Pour agences & consultants</p>
+                  <ul className="text-left space-y-3 mb-6">
+                    <li className="flex items-center text-sm">
+                      <span className="w-4 h-4 text-green-500 mr-2">✓</span>
+                      Audits illimités
+                    </li>
+                    <li className="flex items-center text-sm">
+                      <span className="w-4 h-4 text-green-500 mr-2">✓</span>
+                      Votre logo + branding
+                    </li>
+                    <li className="flex items-center text-sm">
+                      <span className="w-4 h-4 text-green-500 mr-2">✓</span>
+                      API & intégrations
+                    </li>
+                    <li className="flex items-center text-sm">
+                      <span className="w-4 h-4 text-green-500 mr-2">✓</span>
+                      Support prioritaire
+                    </li>
+                  </ul>
+                  <a 
+                    href="mailto:info@mattkonnect.com?subject=Demande marque blanche"
+                    className="block w-full bg-gray-900 text-white text-center font-semibold py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors"
+                  >
+                    Demander un devis
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* Formulaire modernisé */}
+            <div className="max-w-2xl mx-auto">
+              <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+                <div className="text-center mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Commencez votre audit gratuit</h2>
+                  <p className="text-gray-600">Entrez votre domaine et recevez le rapport par email</p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Mode selection avec style moderne */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">Type d'audit</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
+                        auditMode === 'fast' 
+                          ? 'border-blue-500 bg-blue-50 text-blue-700' 
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}>
+                        <input
+                          type="radio"
+                          value="fast"
+                          checked={auditMode === 'fast'}
+                          onChange={(e) => setAuditMode(e.target.value as AuditMode)}
+                          className="sr-only"
+                        />
+                        <div className="text-center">
+                          <div className="font-semibold">🚀 Rapide</div>
+                          <div className="text-sm text-gray-600">~15 secondes</div>
+                          <div className="text-xs text-gray-500 mt-1">Gratuit</div>
+                        </div>
+                      </label>
+                      <label className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
+                        auditMode === 'complete' 
+                          ? 'border-purple-500 bg-purple-50 text-purple-700' 
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}>
+                        <input
+                          type="radio"
+                          value="complete"
+                          checked={auditMode === 'complete'}
+                          onChange={(e) => setAuditMode(e.target.value as AuditMode)}
+                          className="sr-only"
+                        />
+                        <div className="text-center">
+                          <div className="font-semibold">💎 Complet</div>
+                          <div className="text-sm text-gray-600">~45 secondes</div>
+                          <div className="text-xs text-gray-500 mt-1">47€ - Bientôt</div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Domain input modernisé */}
+                  <div>
+                    <label htmlFor="domain" className="block text-sm font-medium text-gray-700 mb-2">
+                      Nom de domaine
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        id="domain"
+                        value={domain}
+                        onChange={(e) => setDomain(e.target.value)}
+                        placeholder="exemple.com"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        required
+                      />
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                        <span className="text-gray-400">🌐</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Email input modernisé */}
+                  <div>
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                      Adresse email
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="email"
+                        id="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="votre@email.com"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        required
+                      />
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                        <span className="text-gray-400">📧</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      📋 Vous recevrez un rapport {auditMode === 'complete' ? 'complet' : 'gratuit'} avec recommandations par email
+                    </p>
+                  </div>
+
+                  {error && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <p className="text-red-700 text-sm">{error}</p>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className={`w-full py-4 px-6 rounded-lg font-semibold transition-all duration-300 ${
+                      loading
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : auditMode === 'complete'
+                        ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:shadow-lg transform hover:scale-105'
+                        : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-lg transform hover:scale-105'
+                    } text-white`}
+                  >
+                    {loading ? (
+                      <div className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                        {auditMode === 'complete' ? 'Audit complet en cours...' : 'Audit en cours...'}
+                      </div>
+                    ) : (
+                      `🚀 Lancer l'audit ${auditMode === 'complete' ? 'complet' : 'gratuit'} + Email`
+                    )}
+                  </button>
+                </form>
+
+                {/* Trust indicators */}
+                <div className="mt-6 pt-6 border-t border-gray-100">
+                  <div className="flex items-center justify-center space-x-8 text-sm text-gray-500">
+                    <div className="flex items-center">
+                      <span className="text-green-500 mr-1">🔒</span>
+                      Sécurisé
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-blue-500 mr-1">⚡</span>
+                      Instantané
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-purple-500 mr-1">📊</span>
+                      Professionnel
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
           <div className="max-w-md mx-auto">
             <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md">
               <h2 className="text-xl font-semibold mb-4">Entrez le domaine à auditer</h2>
@@ -472,7 +630,7 @@ export default function Home() {
 
             {/* SEO Basic Results */}
             <div className="bg-white p-6 rounded-lg shadow-md">
-              <h3 className="text-xl font-semibold mb-4">Analyse SEO de base (Cheerio)</h3>
+              <h3 className="text-xl font-semibold mb-4">Analyse SEO de base</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
                   <strong>Titre:</strong> {results.seoBasic.title || '❌ Manquant'}
@@ -571,7 +729,7 @@ export default function Home() {
             {/* SEO Advanced Results (if available) */}
             {results.seoAdvanced && (
               <div className="bg-white p-6 rounded-lg shadow-md">
-                <h3 className="text-xl font-semibold mb-4">Analyse SEO avancée (Puppeteer)</h3>
+                <h3 className="text-xl font-semibold mb-4">Analyse SEO avancée</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                   <div>
                     <h4 className="font-semibold text-green-600 mb-2">Structure HTML</h4>
