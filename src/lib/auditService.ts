@@ -274,3 +274,6 @@ export class AuditService {
         }
     }
 }
+
+// Instance exportée pour faciliter l'utilisation
+export const auditService = new AuditService()

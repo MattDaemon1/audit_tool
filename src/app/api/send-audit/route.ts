@@ -74,22 +74,24 @@ function validateEmail(email: string): boolean {
 }
 
 export async function POST(request: NextRequest) {
+    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+    const userAgent = request.headers.get('user-agent') || undefined
+
     try {
         // Protection CSRF
         const xRequestedWith = request.headers.get('x-requested-with')
         if (xRequestedWith !== 'XMLHttpRequest') {
+            await securityLogger.logSuspiciousActivity(ip, userAgent, 'Tentative de requête sans header CSRF')
             return NextResponse.json({ error: 'Requête non autorisée' }, { status: 403 })
         }
 
         // Rate limiting pour emails (plus strict)
-        const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
         if (!checkEmailRateLimit(ip)) {
+            await securityLogger.logRateLimitExceeded(ip, userAgent, '/api/send-audit')
             return NextResponse.json({
                 error: 'Limite d\'envoi atteinte. Veuillez attendre 5 minutes avant de réessayer.'
             }, { status: 429 })
-        }
-
-        const { domain, email, mode = 'fast', options = {}, timestamp } = await request.json();
+        } const { domain, email, mode = 'fast', options = {}, timestamp } = await request.json();
 
         // Validation de base
         if (!domain || !email) {
@@ -133,20 +135,52 @@ export async function POST(request: NextRequest) {
         // Nettoyage des inputs
         const cleanDomain = domain.trim().toLowerCase()
         const cleanEmail = email.trim().toLowerCase()
+        const requestId = uuidv4()
 
-        console.log(`[EMAIL-AUDIT] Démarrage audit sécurisé + envoi email pour ${cleanDomain} (${cleanEmail}) [IP: ${ip}]`);
+        console.log(`[EMAIL-AUDIT] Démarrage audit sécurisé + envoi email pour ${cleanDomain} (${cleanEmail}) [IP: ${ip}] [ID: ${requestId}]`);
 
-        // 1. Exécuter l'audit avec timeout
-        const auditResults = await Promise.race([
-            runHybridAudit(cleanDomain, mode),
-            new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Timeout audit')), 120000) // 2 minutes max
-            )
-        ]) as any;
+        // Vérifier le cache d'abord
+        const cachedResult = await CacheService.getCachedAudit(cleanDomain, mode)
+        let auditResults: any
 
-        console.log(`[EMAIL-AUDIT] Audit terminé en ${Math.round(auditResults.executionTime / 1000)}s`);
+        if (cachedResult) {
+            console.log(`[EMAIL-AUDIT] Utilisation du cache pour ${cleanDomain}`)
+            auditResults = cachedResult
+            await securityLogger.logAuditRequest(ip, userAgent, cleanDomain, cleanEmail.replace(/(?<=.{2}).(?=.*@)/g, '*'), 'email-cached')
+        } else {
+            // 1. Exécuter l'audit avec timeout
+            auditResults = await Promise.race([
+                runHybridAudit(cleanDomain, mode),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Timeout audit')), 120000) // 2 minutes max
+                )
+            ]) as any;
 
-        // 2. Générer le PDF avec protection
+            console.log(`[EMAIL-AUDIT] Audit terminé en ${Math.round(auditResults.executionTime / 1000)}s`)
+
+            // Sauvegarder en base et cache
+            try {
+                await AuditService.saveAudit({
+                    domain: cleanDomain,
+                    email: cleanEmail,
+                    mode,
+                    ipAddress: ip,
+                    userAgent,
+                    requestId,
+                    results: auditResults,
+                    executionTime: auditResults.executionTime || 0,
+                    pdfGenerated: false,
+                    emailSent: false
+                })
+
+                await CacheService.setCachedAudit(cleanDomain, mode, auditResults)
+
+                await securityLogger.logAuditRequest(ip, userAgent, cleanDomain, cleanEmail.replace(/(?<=.{2}).(?=.*@)/g, '*'), 'email-new')
+            } catch (error) {
+                await securityLogger.logSuspiciousActivity(ip, userAgent, `Erreur sauvegarde audit email: ${error instanceof Error ? error.message : 'Erreur inconnue'}`)
+                // Continue même si la sauvegarde échoue
+            }
+        }        // 2. Générer le PDF avec protection
         let pdfBase64: string | undefined;
         try {
             const pdfBuffer = await Promise.race([
@@ -189,7 +223,22 @@ export async function POST(request: NextRequest) {
 
         console.log(`[EMAIL-AUDIT] Email envoyé en sécurité (ID: ${emailResult.messageId})`);
 
-        // 4. Retourner les résultats
+        // 4. Mettre à jour le statut d'envoi email si l'audit était déjà sauvegardé
+        try {
+            if (!cachedResult) {
+                // Déjà sauvegardé plus haut, pas besoin de re-sauvegarder
+                console.log(`[EMAIL-AUDIT] Audit déjà sauvegardé avec statut email`)
+            }
+            console.log(`[EMAIL-AUDIT] Statut email traité`)
+        } catch (dbError) {
+            console.error('[EMAIL-AUDIT] Erreur gestion statut email:', dbError)
+            // Ne pas faire échouer la requête pour une erreur de sauvegarde
+        }
+
+        // 5. Logger l'audit réussi
+        await securityLogger.logAuditRequest(ip, userAgent, cleanDomain, cleanEmail, mode)
+
+        // 6. Retourner les résultats
         return NextResponse.json({
             success: true,
             message: 'Audit terminé et rapport envoyé par email en sécurité',

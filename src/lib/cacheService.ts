@@ -199,3 +199,6 @@ export class CacheService {
         }
     }
 }
+
+// Instance exportée pour faciliter l'utilisation
+export const cacheService = new CacheService()
